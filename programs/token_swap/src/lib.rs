@@ -1,5 +1,5 @@
 pub const POOL_SEED_1: &[u8] = &[101, 191, 209, 12, 36, 241, 255, 11];
-pub const SIGNER_SEED_1: &[u8] = &[301, 191, 425, 12, 36, 152, 255, 16];
+pub const SIGNER_SEED_1: &[u8] = &[240, 191, 125, 12, 36, 152, 255, 16];
 
 
 use anchor_lang::{prelude::*, solana_program::{instruction::Instruction, program::{invoke, invoke_signed}}};
@@ -10,7 +10,7 @@ pub enum ErrorCode {
     #[msg("SwapPool: Unauthorized. ")]
     Unauthorized = 401
 }
-declare_id!("Ds93hEKwNHR8MKkgJ7KApiEt6fQjdYJJD9vESo395XW4");
+declare_id!("Gc45jvXbsUf1f7rM1ZqfxaM3FD3owJJ6opnWssbwsKFu");
 
 
 #[program]
@@ -23,7 +23,8 @@ pub mod token_swap {
         let pool_account = &mut _ctx.accounts.pool_account;
         let (_, signer_nonce) = Pubkey::find_program_address(
             &[
-              POOL_SEED_1,
+              &SIGNER_SEED_1,
+              pool_account.to_account_info().key.as_ref(),  
             ],
             _ctx.program_id,
           );
@@ -68,20 +69,25 @@ pub mod token_swap {
 
     pub fn swap_token(_ctx: Context<SwapToken>, amount: u64) -> Result<()> { 
         let pool_account = &_ctx.accounts.pool_account;
+        let pool_signer = &_ctx.accounts.pool_signer;
         let payer = &_ctx.accounts.swapper;
         let swapper_ata_token_a = &_ctx.accounts.swapper_ata_token_a;
         let swapper_ata_token_b = &_ctx.accounts.swapper_ata_token_b;
-        let cpi_program = _ctx.accounts.token_program.clone();
         let pool_ata_token_a = &_ctx.accounts.pool_ata_token_a;
         let pool_ata_token_b = &_ctx.accounts.pool_ata_token_b;
+        
+        let cpi_program = _ctx.accounts.token_program.clone();
         let cpi_accounts = Transfer { 
           from : swapper_ata_token_a.to_account_info(),
           to: pool_ata_token_a.to_account_info(),
           authority: payer.to_account_info()
         };
 
-        let ctx_cpi = CpiContext::new(cpi_program.to_account_info(), cpi_accounts);        
-        transfer(ctx_cpi, amount);
+        let ctx_cpi = CpiContext::new(
+          cpi_program.to_account_info(),
+          cpi_accounts);        
+        transfer(ctx_cpi, amount)
+        .expect("Pool_error: CPI fail");
 
 
         let receive_amount = amount * pool_account.rate / 100;
@@ -89,41 +95,23 @@ pub mod token_swap {
         let cpi_accounts_resend = Transfer { 
           from : pool_ata_token_b.to_account_info(),
           to: swapper_ata_token_b.to_account_info(),
-          authority: pool_account.to_account_info()
+          authority: pool_signer.to_account_info(),
         };
 
-        let seeds = &[
-          POOL_SEED_1,
-          &pool_account.to_account_info().key.as_ref(),
+        let seeds: &[&[_]] = &[
+          &SIGNER_SEED_1,
+          pool_account.to_account_info().key.as_ref(),   
           &[pool_account.signer_nonce],
         ];
+        let seeded = &[seeds];
 
-        let ctx_cpi_resend = CpiContext::new(
+        let ctx_cpi_2 = CpiContext::new_with_signer(
           cpi_program.to_account_info(),
           cpi_accounts_resend,
-        ).with_signer(&[seeds]);
-        
-        transfer(ctx_cpi_resend, receive_amount);
-
-        // transfer(
-        //     cpi,
-        //     amount,
-        //   //   &pool_signer,
-        //   //   amount,
-        //   //   &[&seeds],
-        //   //   &token_program_a,
-        //   )
-        //   .expect("Pool_swap: CPI failed.");
-
-          // transfer(
-          //   &pool_signer,
-          //   &pool_signer,
-          //   &sender,
-          //   receive_amount,
-          //   &[&seeds],
-          //   &token_program_b,
-          // )
-          // .expect("Pool_swap: CPI failed.");
+          seeded,
+        );
+        transfer(ctx_cpi_2, receive_amount)
+        .expect("Pool_error: CPI fail");
         Ok(())
     } 
   
@@ -149,38 +137,36 @@ pub struct CreatePool<'info> {
 
 #[derive(Accounts)]
 pub struct SwapToken<'info> {
-  ///CHECK : test 
+  ///CHECK : Swapper
     #[account(signer)]
     pub swapper: AccountInfo<'info>,
-  /// CHECK : pool account to hold access and sign
-    #[account(mut)]
     pub pool_account: Account<'info, Pool>,
-    /// CHECK : generate to sign tx
+    /// CHECK : Signer hold pool's assets
     #[account(
         mut,
         seeds = [ 
-            SIGNER_SEED_1,
-            // pool_account.to_account_info().key.as_ref(), 
+            &SIGNER_SEED_1,
+            pool_account.to_account_info().key.as_ref(), 
             ],
         bump = pool_account.signer_nonce
         )]
     pub pool_signer: AccountInfo<'info>,
-    /// CHECK : Swapper   
+    /// CHECK : Swapper's TokenA account
     #[account(mut)]
     pub swapper_ata_token_a: AccountInfo<'info>,
-    /// CHECK : Swapper   
+    /// CHECK : Swapper's TokenB account
     #[account(mut)]
     pub swapper_ata_token_b: AccountInfo<'info>,
-    /// CHECK : Swapper   
+    /// CHECK : Token A
     #[account(mut)]
     pub token_a: Account<'info,Mint>,
-    /// CHECK: Token b to swap
+    /// CHECK: Token B
     #[account(mut)]
     pub token_b: Account<'info,Mint>,
-    /// CHECK: This is the token account that we want to mint tokens to
+    /// CHECK: Pool's Token A Account
     #[account(mut)]
     pub pool_ata_token_a: AccountInfo<'info>,
-    /// CHECK: This is the token account that we want to mint tokens to
+    /// CHECK: Pool's Token B Account
     #[account(mut)]
     pub pool_ata_token_b: AccountInfo<'info>,
     pub token_program: Program<'info, Token>,
@@ -238,36 +224,37 @@ pub struct MintToken<'info> {
 
 
 
-// #[derive(AnchorSerialize, AnchorDeserialize, Default)]
-// pub struct TransferTokenParams {
-//   pub instruction: u8,
-//   pub amount: u64,
-// }
-// pub fn transfer_token<'a>( 
-//     owner: &AccountInfo<'a>,
-//     from_pubkey: &AccountInfo<'a>,
-//     to_pubkey: &AccountInfo<'a>,
-//     amount: u64,
-//     signer_seeds: &[&[&[u8]]],
-//     token_program: &AccountInfo<'a>
-// ) -> std::result::Result<(), ProgramError > { 
-//     let data = TransferTokenParams {
-//         instruction: 3,
-//         amount,
-//       };
-//       let instruction = Instruction {
-//         program_id: *token_program.key,
-//         accounts: vec![
-//           AccountMeta::new(*from_pubkey.key, false),
-//           AccountMeta::new(*to_pubkey.key, false),
-//           AccountMeta::new_readonly(*owner.key, true),
-//         ],
-//         data: data.try_to_vec().unwrap(),
-//       };
-//       if signer_seeds.len() == 0 {
-//         invoke(&instruction, &[from_pubkey.clone(), to_pubkey.clone(), owner.clone()])
-//       }
-//       else {
-//         invoke_signed(&instruction, &[from_pubkey.clone(), to_pubkey.clone(), owner.clone()], &signer_seeds)
-//       }
-// }
+#[derive(AnchorSerialize, AnchorDeserialize, Default)]
+pub struct TransferTokenParams {
+  pub instruction: u8,
+  pub amount: u64,
+}
+
+pub fn transfer_token<'a>(
+  owner: &AccountInfo<'a>,
+  from_pubkey: &AccountInfo<'a>,
+  to_pubkey: &AccountInfo<'a>,
+  amount: u64,
+  signer_seeds: &[&[&[u8]]],
+  program_id: &Program<'a,Token>
+) -> std::result::Result<(), ProgramError> {
+  let data = TransferTokenParams {
+    instruction: 3,
+    amount,
+  };
+  let instruction = Instruction {
+    program_id: program_id.key(),
+    accounts: vec![
+      AccountMeta::new(*from_pubkey.key, false),
+      AccountMeta::new(*to_pubkey.key, false),
+      AccountMeta::new_readonly(*owner.key, true),
+    ],
+    data: data.try_to_vec().unwrap(),
+  };
+  if signer_seeds.len() == 0 {
+    invoke(&instruction, &[from_pubkey.clone(), to_pubkey.clone(), owner.clone()])
+  }
+  else {
+    invoke_signed(&instruction, &[from_pubkey.clone(), to_pubkey.clone(), owner.clone()], &signer_seeds)
+  }
+}

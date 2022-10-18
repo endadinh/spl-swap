@@ -1,7 +1,7 @@
 [features]
 seeds = false
 [programs.localnet]
-token_swap = "Ds93hEKwNHR8MKkgJ7KApiEt6fQjdYJJD9vESo395XW4"
+token_swap = "Gc45jvXbsUf1f7rM1ZqfxaM3FD3owJJ6opnWssbwsKFu"
 
 [registry]
 url = "https://anchor.projectserum.com"
