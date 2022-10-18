@@ -17,8 +17,7 @@ describe("test", () => {
   const program = anchor.workspace.TokenSwap as Program<TokenSwap>;
 
   it("Is initialized!", async () => {
-    // Defined 
-
+    // Defined
 
     const POOL_SEED_1 = [101, 191, 209, 12, 36, 241, 255, 11];
     const SIGNER_SEED_1 = [240, 191, 125, 12, 36, 152, 255, 16];
@@ -31,7 +30,6 @@ describe("test", () => {
       "http://localhost:8899",
       "confirmed"
     );
-
 
     // Define accounts to test
     const mainAccount = await SolanaConfigService.getDefaultAccount();
@@ -46,13 +44,9 @@ describe("test", () => {
 
     const system_program = await anchor.web3.SystemProgram.programId;
 
-
     const [poolSignerAddress, nonce] =
       await anchor.web3.PublicKey.findProgramAddress(
-        [
-          signer_seeds,
-          poolPDA_address.toBuffer(),
-        ],
+        [signer_seeds, poolPDA_address.toBuffer()],
         program.programId
       );
     // console.log('')
@@ -120,20 +114,19 @@ describe("test", () => {
     // );
 
     // /// Init new pool ()
-        try { 
-          const tx = await program.methods.initPool()
-          .accounts({
-            owner: mainAccount.publicKey,
-            poolAccount: poolPDA_address,
-            systemProgram: system_program
-          })
-          .rpc();
-          console.log("Your transaction signature", tx);
-
-        }
-        catch(error) { 
-          console.log('error',error)
-        }
+    try {
+      const tx = await program.methods
+        .initPool()
+        .accounts({
+          owner: mainAccount.publicKey,
+          poolAccount: poolPDA_address,
+          systemProgram: system_program,
+        })
+        .rpc();
+      console.log("Your transaction signature", tx);
+    } catch (error) {
+      console.log("error", error);
+    }
 
     /// Setting rate
 
@@ -180,26 +173,56 @@ describe("test", () => {
     console.log("mint transaction hash", mintTokenToSwapperTx);
 
     // Swap token
-    try {
-      const swapTokenTx = await program.methods
-        .swapToken(new anchor.BN(1000000))
-        .accounts({
-          swapper: mainAccount.publicKey,
-          poolAccount: poolPDA_address,
-          poolSigner: poolSignerAddress,
-          swapperAtaTokenA: ATA_Account_A,
-          swapperAtaTokenB: ATA_Account_B,
-          tokenA: tokenMintA.publicKey,
-          tokenB: tokenMintB.publicKey,
-          poolAtaTokenA: ATA_Account_A_POOL,
-          poolAtaTokenB: ATA_Account_B_POOL,
-          tokenProgram: TOKEN_PROGRAM_ID,
-        })
-        .signers([mainAccount])
-        .rpc();
-      console.log("Swap token hash", swapTokenTx);
-    } catch (error) {
-      console.log("swap error", error);
-    }
+    const swapTokenTx = await program.methods
+      .swapToken(new anchor.BN(1000000))
+      .accounts({
+        swapper: mainAccount.publicKey,
+        poolAccount: poolPDA_address,
+        poolSigner: poolSignerAddress,
+        swapperAtaTokenA: ATA_Account_A,
+        swapperAtaTokenB: ATA_Account_B,
+        tokenA: tokenMintA.publicKey,
+        tokenB: tokenMintB.publicKey,
+        poolAtaTokenA: ATA_Account_A_POOL,
+        poolAtaTokenB: ATA_Account_B_POOL,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([mainAccount])
+      .rpc();
+    console.log("Swap token hash", swapTokenTx);
+
+    // Swap token  to sol
+    const swapTokenToSolTx = await program.methods
+      .swapTokenToSol(new anchor.BN(1000000))
+      .accounts({
+        swapper: mainAccount.publicKey,
+        poolAccount: poolPDA_address,
+        poolSigner: poolSignerAddress,
+        swapperAtaToken: ATA_Account_A,
+        token: tokenMintA.publicKey,
+        poolAtaToken: ATA_Account_A_POOL,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: anchor.web3.SystemProgram.programId,
+      })
+      .signers([mainAccount])
+      .rpc();
+    console.log("Swap token hash", swapTokenToSolTx);
+
+    // Swap sol to token
+    const swapSolToTokenTx = await program.methods
+      .swapSolToToken(new anchor.BN(1000000))
+      .accounts({
+        swapper: mainAccount.publicKey,
+        poolAccount: poolPDA_address,
+        poolSigner: poolSignerAddress,
+        swapperAtaToken: ATA_Account_A,
+        token: tokenMintA.publicKey,
+        poolAtaToken: ATA_Account_A_POOL,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: anchor.web3.SystemProgram.programId,
+      })
+      .signers([mainAccount])
+      .rpc();
+    console.log("Swap token hash", swapSolToTokenTx);
   });
 });
